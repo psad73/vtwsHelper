@@ -53,13 +53,6 @@ class vtwsHelper
         return $entity;
     }
 
-    public static function getCrmId($moduleName, $id)
-    {
-        $module = self::describeModule($moduleName);
-        $crmId = $module['idPrefix'] . 'x' . $id;
-        return $crmId;
-    }
-
     public static function describeModule($moduleName)
     {
         $user = self::getCurrentUser();
@@ -85,6 +78,25 @@ class vtwsHelper
         }
     }
 
+    public static function getModuleId($crmId)
+    {
+        $m = preg_split("/x/", $crmId);
+        return $m[0];
+    }
+
+    public static function getId($crmId)
+    {
+        $m = preg_split("/x/", $crmId);
+        return $m[1];
+    }
+
+    public static function getCrmId($moduleName, $id)
+    {
+        $module = self::describeModule($moduleName);
+        $crmId = $module['idPrefix'] . 'x' . $id;
+        return $crmId;
+    }
+
     public static function getWsId($moduleName, $id)
     {
         try {
@@ -95,13 +107,50 @@ class vtwsHelper
         return $wsid;
     }
 
+    public static function getCustomFields($cfName)
+    {
+        $idColName = $cfName . 'id';
+        $valueColName = $cfName;
+        $tableName = 'vtiger_' . $cfName;
+        $db = PearDatabase::getInstance();
+        $sql = "SELECT ${idColName}, ${valueColName} FROM ${tableName} ORDER BY sortorderid";
+        $rows = $db->pquery($sql, []);
+        $cfRecords = [];
+        foreach ($rows as $row) {
+            $cfRecords[] = [
+                'id' => $row[$idColName],
+                'value' => $row[$valueColName]
+            ];
+        }
+        return $cfRecords;
+    }
+
+    public static function getCustomField($cfName, $id)
+    {
+        $db = PearDatabase::getInstance();
+        $idColName = $cfName . 'id';
+        $tableName = 'vtiger_' . $cfName;
+        $sql = "SELECT * FROM `${tableName}` WHERE `${idColName}` = ?";
+        $row = $db->pquery($sql, [$id]);
+
+        if ($row) {
+            return $row->fields;
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     *
+     * @global type $current_user
+     * @return type
+     */
     public static function getCurrentUser()
     {
         global $current_user;
         //$currentUser = CRMEntity::getInstance('Users');
         //$currentUser->retrieveCurrentUserInfoFromFile(1);
         $currentUser = $current_user;
-        //var_dump($currentUser);
         return $currentUser;
     }
 
@@ -126,6 +175,16 @@ class vtwsHelper
         return $records;
     }
 
+    public static function addSalesOrderToQuote($quoteId, $salesOrderId)
+    {
+
+        $currentUser = self::getCurrentUser();
+        $query = "UPDATE vtiger_salesorder SET quoteid = 666 WHERE salesorderid = 385";
+        $r = vtws_query($query, $currentUser);
+        var_dump($r);
+        return $r;
+    }
+
     public static function getTicketsForCompany($accountId)
     {
         $currentUser = self::getCurrentUser();
@@ -136,7 +195,6 @@ class vtwsHelper
 
     public static function funnyTicketSorter($a, $b)
     {
-        //var_dump($a['id'] < $b['id']);
         if (($a['ticketpriorities'] == 'Miesięczny') && ($b['ticketpriorities'] != 'Miesięczny')) {
             return false;
         }
@@ -257,20 +315,6 @@ class vtwsHelper
             $eventStatus = false;
         }
         return $eventStatus;
-        /**
-          var_dump($result->NumRows());
-          var_dump($eventStatusId);
-          var_dump(get_class_methods($result));
-         */
-    }
-
-    public static function addSalesOrderToQuote($quoteId, $salesOrderId)
-    {
-        $currentUser = self::getCurrentUser();
-        $query = "UPDATE vtiger_salesorder SET quoteid = 666 WHERE salesorderid = 385";
-        $r = vtws_query($query, $currentUser);
-        var_dump($r);
-        return $r;
     }
 
     public static function getIdFromCrmId($crmId)
@@ -340,6 +384,22 @@ class vtwsHelper
         return $module;
     }
 
+    public static function postArrayToArray($postArray)
+    {
+        $returnArray = [];
+        foreach ($postArray as $pa) {
+            if (key_exists($pa['name'], $returnArray) && !is_array($returnArray[$pa['name']])) {
+                $returnArray[$pa['name']] = [$returnArray[$pa['name']]];
+                $returnArray[$pa['name']][] = $pa['value'];
+            } elseif (key_exists($pa['name'], $returnArray) && is_array($returnArray[$pa['name']])) {
+                $returnArray[$pa['name']][] = $pa['value'];
+            } else {
+                $returnArray[$pa['name']] = $pa['value'];
+            }
+        }
+        return $returnArray;
+    }
+
     /**
      *  Installation/uninstall
      *
@@ -349,53 +409,16 @@ class vtwsHelper
         return 51;
     }
 
-    private static function getModuleLinks()
+    private static function getModuleResources()
     {
-        // id = 0 for SCRIPTS, visible always
-        return [
-            [
-                'id' => 56,
-                'type' => 'HEADERSCRIPT',
-                'name' => 'QSupportJs',
-                'path' => 'layouts/v7/modules/QSupport/resources/QSupport.js',
-                'sequence' => 0
-            ],
-            [
-                'id' => 3,
-                'type' => 'DASHBOARDWIDGET',
-                'name' => 'QSupport',
-                'path' => 'index.php?module=QSupport&view=ShowWidget&name=Support',
-                'sequence' => 1
-            ],
-            [
-                'id' => 3,
-                'type' => 'DASHBOARDWIDGET',
-                'name' => 'QSupportQuickEventAdd',
-                'path' => 'index.php?module=QSupport&view=ShowWidget&name=QuickEventAdd',
-                'sequence' => 1
-            ],
-            [
-                'id' => 51,
-                'type' => 'HEADERCSS',
-                'name' => 'QSupportCss',
-                'path' => 'layouts/v7/modules/QSupport/css/qsupport.css',
-                'sequence' => 0
-            ],
-            [
-                'id' => 51,
-                'type' => 'HEADERSCRIPT',
-                'name' => 'BootstrapDateTimePickerJS',
-                'path' => 'layouts/v7/modules/QSupport/resources/bootstrap-datetimepicker/js/bootstrap-datetimepicker.min.js',
-                'sequence' => 0
-            ],
-            [
-                'id' => 51,
-                'type' => 'HEADERCSS',
-                'name' => 'BootstrapDateTimePickerCss',
-                'path' => 'layouts/v7/modules/QSupport/resources/bootstrap-datetimepicker/css/bootstrap-datetimepicker.min.css',
-                'sequence' => 0
-            ],
-        ];
+        $resourceFile = "modules/QTExtension/resources.yml";
+        if (function_exists('yaml_parse_file')) {
+            $resources = yaml_parse_file($resourceFile);
+        } else {
+            Symfony\Component\Yaml\Yaml::parseFile($resourceFile);
+        }
+
+        return $resources;
     }
 
     public static function vtDashboardWidget()
@@ -406,19 +429,27 @@ class vtwsHelper
 
     public static function unregisterLinks()
     {
-        $links = self::getModuleLinks();
+        $links = self::getModuleResources();
         $tabId = self::getTabId();
         foreach ($links as $link) {
             Vtiger_Link::deleteLink($link['id'], $link['type'], $link['name'], $link['path']);
         }
     }
 
+    public static function registerResources()
+    {
+        return self::registerLinks();
+    }
+
     public static function registerLinks()
     {
-        $links = self::getModuleLinks();
+        $links = self::getModuleResources();
         $tabId = self::getTabId();
         foreach ($links as $link) {
-            Vtiger_Link::addLink($link['id'], $link['type'], $link['name'], $link['path'], "", $link['sequence'], "");
+            if (!key_exists('disabled', $link) && $link['disabled'] <> 1) {
+                Vtiger_Link::deleteLink($link['id'], $link['type'], $link['name'], $link['path']);
+                Vtiger_Link::addLink($link['id'], $link['type'], $link['name'], $link['path'], "", $link['sequence'], "");
+            }
         }
     }
 

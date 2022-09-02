@@ -1,5 +1,4 @@
 <?php
-
 require_once 'include/Webservices/AddRelated.php';
 require_once 'include/Webservices/Create.php';
 require_once 'include/Webservices/Delete.php';
@@ -423,14 +422,9 @@ class vtwsHelper
      * @return type
      */
     private static function getModuleResources($modName)
-    {
-        $resourceFile = "modules/" . $modName . "/resources.yml";
-        if (function_exists('yaml_parse_file')) {
-            $resources = yaml_parse_file($resourceFile);
-        } else {
-            Symfony\Component\Yaml\Yaml::parseFile($resourceFile);
-        }
-
+    {     
+        $resourceFile = "modules/" . $modName . "/resources.ini.php";
+        require $resourceFile;     
         return $resources;
     }
 
@@ -460,7 +454,6 @@ class vtwsHelper
 
     public static function registerEvents($modName)
     {
-
         if (Vtiger_Event::hasSupport()) {
             Vtiger_Event::register(
                 'HelpDesk', 'vtiger.entity.aftersave',
@@ -475,7 +468,6 @@ class vtwsHelper
 
     public static function registerLinks($modName)
     {
-        //$tabId = self::getTabId();
         $res = self::getModuleResources($modName);
         if (is_array($res['link'])) {
             foreach ($res['link'] as $link) {
@@ -509,9 +501,9 @@ class vtwsHelper
         require_once 'modules/com_vtiger_workflow/VTEntityMethodManager.inc';
         global $adb;
         $emm = new VTEntityMethodManager($adb);
-        $res = self::getModuleResources($modName);
+        $res = self::getModuleResources($modName);        
         if (is_array($res['entityMethod'])) {
-            foreach ($res['entityMethod'] as $em) {
+            foreach ($res['entityMethod'] as $em) {                
                 $emm->addEntityMethod($em['module'], $em['method'], $em['path'], $em['function']);
             }
         }

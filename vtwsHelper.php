@@ -11,6 +11,7 @@ require_once 'include/Webservices/Revise.php';
 require_once 'include/Webservices/Update.php';
 require_once 'include/Webservices/Utils.php';
 require_once 'vtlib/Vtiger/Link.php';
+require_once 'vtlib/Vtiger/Event.php';
 
 class vtwsHelper
 {
@@ -32,6 +33,8 @@ class vtwsHelper
         $currentUser = self::getCurrentUser();
         if (!preg_match("/([0-9]+)x([0-9]+)/", $wsId, $m)) {
             $wsId = self::getWsId($wsId, $id);
+        } elseif (($wsId && $id)) {
+            $wsId = $id;
         }
         try {
             $entity = vtws_retrieve($wsId, $currentUser);
@@ -148,8 +151,8 @@ class vtwsHelper
     public static function getCurrentUser()
     {
         global $current_user;
-        //$currentUser = CRMEntity::getInstance('Users');
-        //$currentUser->retrieveCurrentUserInfoFromFile(1);
+//$currentUser = CRMEntity::getInstance('Users');
+//$currentUser->retrieveCurrentUserInfoFromFile(1);
         $currentUser = $current_user;
         return $currentUser;
     }
@@ -162,12 +165,17 @@ class vtwsHelper
         return $crmId;
     }
 
-    public static function getAllEntities($module)
+    public static function getAllEntities($module, $conditions = [])
     {
         $currentUser = self::getCurrentUser();
         try {
             $q = "SELECT * FROM " . $module . "";
+            if (count($conditions) > 0) {
+                $q = $q . " WHERE " . join(" AND ", $conditions);
+            }
+            $q = $q . " LIMIT 5000";
             $q = $q . ';'; // NOTE: Make sure to terminate query with ;
+
             $records = vtws_query($q, $currentUser);
         } catch (WebServiceException $ex) {
             echo $ex->getMessage();
@@ -409,9 +417,14 @@ class vtwsHelper
         return 51;
     }
 
-    private static function getModuleResources()
+    /**
+     *
+     * @param type $modName
+     * @return type
+     */
+    private static function getModuleResources($modName)
     {
-        $resourceFile = "modules/QTExtension/resources.yml";
+        $resourceFile = "modules/" . $modName . "/resources.yml";
         if (function_exists('yaml_parse_file')) {
             $resources = yaml_parse_file($resourceFile);
         } else {
@@ -427,28 +440,79 @@ class vtwsHelper
         return $output;
     }
 
-    public static function unregisterLinks()
+    public static function unregisterLinks($modName)
     {
-        $links = self::getModuleResources();
+        $res = self::getModuleResources($modName);
         $tabId = self::getTabId();
-        foreach ($links as $link) {
+        foreach ($res['link'] as $link) {
             Vtiger_Link::deleteLink($link['id'], $link['type'], $link['name'], $link['path']);
         }
     }
 
-    public static function registerResources()
+    public static function registerModuleResources($modName)
     {
-        return self::registerLinks();
+        self::registerLinks($modName);
+        self::unregisterEntityMethods($modName);
+        self::registerEntityMethods($modName);
+        self::registerEvents($modName);
+        return null;
     }
 
-    public static function registerLinks()
+    public static function registerEvents($modName)
     {
-        $links = self::getModuleResources();
-        $tabId = self::getTabId();
-        foreach ($links as $link) {
-            if (!key_exists('disabled', $link) && $link['disabled'] <> 1) {
-                Vtiger_Link::deleteLink($link['id'], $link['type'], $link['name'], $link['path']);
-                Vtiger_Link::addLink($link['id'], $link['type'], $link['name'], $link['path'], "", $link['sequence'], "");
+
+        if (Vtiger_Event::hasSupport()) {
+            Vtiger_Event::register(
+                'HelpDesk', 'vtiger.entity.aftersave',
+                'QSEventHandler', 'modules/QSupport/handlers/QSEventHandler.php'
+            );
+            Vtiger_Event::register(
+                'HelpDesk', 'vtiger.entity.beforesave',
+                'QSEventHandler', 'modules/QSupport/handlers/QSEventHandler.php'
+            );
+        }
+    }
+
+    public static function registerLinks($modName)
+    {
+        //$tabId = self::getTabId();
+        $res = self::getModuleResources($modName);
+        if (is_array($res['link'])) {
+            foreach ($res['link'] as $link) {
+                if (!key_exists('disabled', $link) && $link['disabled'] <> 1) {
+                    Vtiger_Link::deleteLink($link['id'], $link['type'], $link['name'], $link['path']);
+                    Vtiger_Link::addLink($link['id'], $link['type'], $link['name'], $link['path'], "", $link['sequence'], "");
+                }
+            }
+        }
+    }
+
+    /**
+     *
+     * @param type $modName
+     */
+    public static function unregisterEntityMethods($modName)
+    {
+        require_once 'modules/com_vtiger_workflow/VTEntityMethodManager.inc';
+        global $adb;
+        $emm = new VTEntityMethodManager($adb);
+        $res = self::getModuleResources($modName);
+        if (is_array($res['entityMethod'])) {
+            foreach ($res['entityMethod'] as $em) {
+                $emm->removeEntityMethod($em['module'], $em['method']);
+            }
+        }
+    }
+
+    public static function registerEntityMethods($modName)
+    {
+        require_once 'modules/com_vtiger_workflow/VTEntityMethodManager.inc';
+        global $adb;
+        $emm = new VTEntityMethodManager($adb);
+        $res = self::getModuleResources($modName);
+        if (is_array($res['entityMethod'])) {
+            foreach ($res['entityMethod'] as $em) {
+                $emm->addEntityMethod($em['module'], $em['method'], $em['path'], $em['function']);
             }
         }
     }
@@ -459,5 +523,23 @@ class vtwsHelper
             ini_set('error_reporting', E_ALL);
             ini_set('display_errors', true);
         }
+    }
+
+    public static function quote(&$el, $removeCR = false)
+    {
+        if (is_array($el)) {
+            foreach ($el as $idx => $e) {
+                if ($removeCR) {
+                    $e = preg_replace("/\n/", " ", $e);
+                }
+                $el[$idx] = '"' . $e . '"';
+            }
+        } else {
+            if ($removeCR) {
+                $e = preg_replace("/\n/", " ", $e);
+            }
+            $el = '"' . $el . '"';
+        }
+        return $el;
     }
 }

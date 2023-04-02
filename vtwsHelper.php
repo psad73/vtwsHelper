@@ -1,10 +1,12 @@
 <?php
+
 require_once 'include/Webservices/AddRelated.php';
 require_once 'include/Webservices/Create.php';
 require_once 'include/Webservices/Delete.php';
 require_once 'include/Webservices/DescribeObject.php';
 require_once 'include/Webservices/ModuleTypes.php';
 require_once 'include/Webservices/Query.php';
+require_once 'include/Webservices/QueryRelated.php';
 require_once 'include/Webservices/Retrieve.php';
 require_once 'include/Webservices/Revise.php';
 require_once 'include/Webservices/Update.php';
@@ -343,9 +345,30 @@ class vtwsHelper
         return $result;
     }
 
-    public static function addRelation($mainCrmId, $relatedCrmId)
+    /**
+     * 
+     * @param type $mainCrmId
+     * @param type $relatedCrmId
+     * @param type $relationTypeName
+     * @return type
+     */
+    public static function addRelation($mainCrmId, $relatedCrmId, $relationTypeName)
     {
+        $user = self::getCurrentUser();
+        return vtws_add_related($mainCrmId, $relatedCrmId, $relationType, $user);
+    }
 
+    /**
+     * 
+     * @param string $relatedTypeName np. HelpDesk
+     * @param string $sourceId 24x18
+     * @param string $relationTypeName "Service Requests"
+     */
+    public static function getRelated($relatedTypeName, $sourceId, $relationTypeName, $filter = '')
+    {
+        $user = self::getCurrentUser();
+        $related = vtws_query_related("SELECT * FROM ${relatedTypeName}", $sourceId, $relationTypeName, $user, $filter);
+        return $related;
     }
 
     public static function renderTemplate($tplName, $tplVars, $options = [])
@@ -422,9 +445,9 @@ class vtwsHelper
      * @return type
      */
     private static function getModuleResources($modName)
-    {     
+    {
         $resourceFile = "modules/" . $modName . "/resources.ini.php";
-        require $resourceFile;     
+        require $resourceFile;
         return $resources;
     }
 
@@ -501,9 +524,9 @@ class vtwsHelper
         require_once 'modules/com_vtiger_workflow/VTEntityMethodManager.inc';
         global $adb;
         $emm = new VTEntityMethodManager($adb);
-        $res = self::getModuleResources($modName);        
+        $res = self::getModuleResources($modName);
         if (is_array($res['entityMethod'])) {
-            foreach ($res['entityMethod'] as $em) {                
+            foreach ($res['entityMethod'] as $em) {
                 $emm->addEntityMethod($em['module'], $em['method'], $em['path'], $em['function']);
             }
         }
